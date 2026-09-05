@@ -146,7 +146,7 @@ app.get("/inbox/:address/:seqno", async (req, res) => {
 
 app.get("/code/:address", async (req, res) => {
   try {
-    const msgs = await fetchMessages(10);
+    const msgs = (await fetchMessages(10)).reverse();
     let latest = null;
     for (const m of msgs) {
       try {
