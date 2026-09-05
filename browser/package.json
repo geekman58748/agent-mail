@@ -1,0 +1,19 @@
+{
+  "name": "agent-mail-browser",
+  "version": "1.0.0",
+  "description": "Headless browser task service for agent-mail (separate Render service, same repo)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "playwright": "^1.40.0",
+    "tesseract.js": "^5.1.0",
+    "uuid": "^9.0.0"
+  }
+}
