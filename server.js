@@ -50,12 +50,43 @@ function saveAccounts(data) {
 // Virtual accounts: address → { createdAt }
 const accounts = loadAccounts();
 
-// ── IMAP Helper ──
-function imapConnect() {
+// ── Persistent IMAP Connection ──
+let imapConn = null;
+let imapReady = false;
+
+function getImap() {
   return new Promise((resolve, reject) => {
+    if (imapConn && imapReady) {
+      try {
+        imapConn.noop((err) => {
+          if (!err) return resolve(imapConn);
+          imapReady = false;
+          imapConn = null;
+          getImap().then(resolve).catch(reject);
+        });
+      } catch (e) {
+        imapReady = false;
+        imapConn = null;
+        getImap().then(resolve).catch(reject);
+      }
+      return;
+    }
+
     const imap = new Imap(IMAP_CONFIG);
-    imap.once("ready", () => resolve(imap));
-    imap.once("error", (err) => reject(err));
+    imap.once("ready", () => {
+      imapConn = imap;
+      imapReady = true;
+      resolve(imap);
+    });
+    imap.once("error", (err) => {
+      imapReady = false;
+      imapConn = null;
+      reject(err);
+    });
+    imap.once("close", () => {
+      imapReady = false;
+      imapConn = null;
+    });
     imap.connect();
   });
 }
@@ -101,9 +132,8 @@ function waitForNewEmail(address, timeoutMs = 60000) {
     const start = Date.now();
     const check = async () => {
       try {
-        const imap = await imapConnect();
+        const imap = await getImap();
         const msgs = await fetchMessages(imap, "INBOX", 5);
-        imap.end();
 
         // Parse and look for new emails
         for (const m of msgs) {
@@ -167,9 +197,8 @@ app.post("/create-email", (req, res) => {
 // List messages (optionally filtered by 'to' address)
 app.get("/inbox/:address", async (req, res) => {
   try {
-    const imap = await imapConnect();
+    const imap = await getImap();
     const msgs = await fetchMessages(imap, "INBOX", 30);
-    imap.end();
 
     const results = [];
     for (const m of msgs) {
@@ -209,7 +238,7 @@ app.get("/inbox/:address", async (req, res) => {
 // Read a specific message by seqno
 app.get("/inbox/:address/:seqno", async (req, res) => {
   try {
-    const imap = await imapConnect();
+    const imap = await getImap();
     const seqno = parseInt(req.params.seqno);
 
     const msg = await new Promise((resolve, reject) => {
@@ -226,8 +255,6 @@ app.get("/inbox/:address/:seqno", async (req, res) => {
         setTimeout(() => resolve(body), 1000);
       });
     });
-
-    imap.end();
     const parsed = await simpleParser(msg);
 
     res.json({
@@ -247,9 +274,8 @@ app.get("/inbox/:address/:seqno", async (req, res) => {
 // Extract verification code from latest email to this address
 app.get("/code/:address", async (req, res) => {
   try {
-    const imap = await imapConnect();
+    const imap = await getImap();
     const msgs = await fetchMessages(imap, "INBOX", 10);
-    imap.end();
 
     // Find latest email to this address
     let latest = null;
