@@ -50,42 +50,21 @@ function saveAccounts(data) {
 // Virtual accounts: address → { createdAt }
 const accounts = loadAccounts();
 
-// ── Persistent IMAP Connection ──
-let imapConn = null;
-let imapReady = false;
-
+// ── IMAP Connection (fresh per request) ──
 function getImap() {
   return new Promise((resolve, reject) => {
-    if (imapConn && imapReady) {
-      try {
-        imapConn.noop((err) => {
-          if (!err) return resolve(imapConn);
-          imapReady = false;
-          imapConn = null;
-          getImap().then(resolve).catch(reject);
-        });
-      } catch (e) {
-        imapReady = false;
-        imapConn = null;
-        getImap().then(resolve).catch(reject);
-      }
-      return;
-    }
-
     const imap = new Imap(IMAP_CONFIG);
+    const timeout = setTimeout(() => {
+      try { imap.destroy(); } catch (e) {}
+      reject(new Error("IMAP connection timeout"));
+    }, 15000);
     imap.once("ready", () => {
-      imapConn = imap;
-      imapReady = true;
+      clearTimeout(timeout);
       resolve(imap);
     });
     imap.once("error", (err) => {
-      imapReady = false;
-      imapConn = null;
+      clearTimeout(timeout);
       reject(err);
-    });
-    imap.once("close", () => {
-      imapReady = false;
-      imapConn = null;
     });
     imap.connect();
   });
