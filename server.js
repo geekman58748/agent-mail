@@ -147,20 +147,26 @@ app.get("/inbox/:address/:seqno", async (req, res) => {
 app.get("/code/:address", async (req, res) => {
   try {
     const msgs = (await fetchMessages(10)).reverse();
+    const patterns = [/verification code[:\s]*(\d{4,8})/i, /code[:\s]*(\d{4,8})/i, /OTP[:\s]*(\d{4,8})/i, /your code is[:\s]*(\d{4,8})/i, /enter (\d{4,8})/i, /(\d{4,8})/];
     let latest = null;
+    let code = null;
     for (const m of msgs) {
       try {
         const p = await simpleParser(m.body);
         const to = p.to?.value?.map(t => t.address?.toLowerCase()) || [];
-        if (to.includes(req.params.address.toLowerCase()) || req.params.address === "all") { latest = p; break; }
+        const matchAddr = to.includes(req.params.address.toLowerCase()) || req.params.address === "all";
+        if (!matchAddr) continue;
+        const text = p.text || "";
+        for (const pat of patterns) {
+          const match = text.match(pat);
+          if (match) { latest = p; code = match[1]; break; }
+        }
+        if (code) break;
+        if (!latest) latest = p;
       } catch(e) {}
     }
     if (!latest) return res.json({ address: req.params.address, code: null, message: "No emails found" });
-    const text = latest.text || "";
-    const patterns = [/verification code[:\s]*(\d{4,8})/i, /code[:\s]*(\d{4,8})/i, /OTP[:\s]*(\d{4,8})/i, /your code is[:\s]*(\d{4,8})/i, /enter (\d{4,8})/i, /(\d{6})/];
-    let code = null;
-    for (const p of patterns) { const m = text.match(p); if (m) { code = m[1]; break; } }
-    res.json({ address: req.params.address, code, from: latest.from?.text, subject: latest.subject, snippet: text.slice(0, 500), date: latest.date?.toISOString() });
+    res.json({ address: req.params.address, code, from: latest.from?.text, subject: latest.subject, snippet: (latest.text || "").slice(0, 500), date: latest.date?.toISOString() });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
